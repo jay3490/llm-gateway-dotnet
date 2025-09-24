@@ -1,0 +1,26 @@
+# .NET build output
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+*.trx
+publish/
+
+# Editors / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Local environment and secrets
+.env
+appsettings.Local.json
+
+# Local SQLite databases
+*.db
+*.db-shm
+*.db-wal
+data/

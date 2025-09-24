@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>LlmGateway</RootNamespace>
+    <UserSecretsId>llm-gateway-dotnet</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="LlmGateway.Tests" />
+  </ItemGroup>
+
+</Project>
