@@ -7,6 +7,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{E4E93EA2-D6B
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LlmGateway", "src\LlmGateway\LlmGateway.csproj", "{239023D5-AD3E-4851-BF4B-EA76983EAD34}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{2DD1F097-6793-4982-A330-F9E7B818DB2C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LlmGateway.Tests", "tests\LlmGateway.Tests\LlmGateway.Tests.csproj", "{9E0D65B7-4ACB-4B2B-ACED-845CDA7AFF13}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,8 +24,13 @@ Global
 		{239023D5-AD3E-4851-BF4B-EA76983EAD34}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{239023D5-AD3E-4851-BF4B-EA76983EAD34}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{239023D5-AD3E-4851-BF4B-EA76983EAD34}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9E0D65B7-4ACB-4B2B-ACED-845CDA7AFF13}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9E0D65B7-4ACB-4B2B-ACED-845CDA7AFF13}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9E0D65B7-4ACB-4B2B-ACED-845CDA7AFF13}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9E0D65B7-4ACB-4B2B-ACED-845CDA7AFF13}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{239023D5-AD3E-4851-BF4B-EA76983EAD34} = {E4E93EA2-D6B2-43D4-9FF2-9E8C9411BE3C}
+		{9E0D65B7-4ACB-4B2B-ACED-845CDA7AFF13} = {2DD1F097-6793-4982-A330-F9E7B818DB2C}
 	EndGlobalSection
 EndGlobal
