@@ -16,11 +16,23 @@ public enum UpstreamKind
 {
     /// <summary>Deterministic in-process provider; needs no network and no API key.</summary>
     Fake,
+
+    /// <summary>Any server speaking the OpenAI HTTP API: OpenAI itself, Ollama, vLLM, LM Studio and similar.</summary>
+    OpenAICompatible,
 }
 
 public sealed class UpstreamOptions
 {
     public UpstreamKind Kind { get; set; } = UpstreamKind.Fake;
+
+    /// <summary>Base URL including the API version segment, for example <c>https://api.openai.com/v1</c> or <c>http://localhost:11434/v1</c>.</summary>
+    public Uri? BaseUrl { get; set; }
+
+    /// <summary>Sent as a bearer token. Leave empty for servers that need no key, such as a local Ollama.</summary>
+    public string? ApiKey { get; set; }
+
+    /// <summary>Extra headers sent with every request, for example <c>OpenAI-Organization</c>.</summary>
+    public Dictionary<string, string> Headers { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 public enum ModelKind

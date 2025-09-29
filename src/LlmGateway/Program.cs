@@ -20,6 +20,7 @@ builder.Services.AddExceptionHandler<GatewayExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddHttpClient(OpenAiCompatibleProvider.HttpClientName);
 builder.Services.AddSingleton<UpstreamRegistry>();
 builder.Services.AddSingleton<ModelCatalog>();
 builder.Services.AddSingleton<ModelRouter>();

@@ -8,17 +8,13 @@ public sealed class UpstreamRegistry
 {
     private readonly Dictionary<string, ILlmProvider> _providers;
 
-    public UpstreamRegistry(IOptions<GatewayOptions> options, TimeProvider timeProvider)
+    public UpstreamRegistry(IOptions<GatewayOptions> options, IHttpClientFactory httpClientFactory, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         _providers = options.Value.Upstreams.ToDictionary(
             pair => pair.Key,
-            pair => pair.Value.Kind switch
-            {
-                UpstreamKind.Fake => (ILlmProvider)new FakeLlmProvider(timeProvider),
-                _ => throw new InvalidOperationException($"Unsupported upstream kind '{pair.Value.Kind}'."),
-            },
+            pair => Create(pair.Key, pair.Value, httpClientFactory, timeProvider),
             StringComparer.OrdinalIgnoreCase);
     }
 
@@ -26,4 +22,12 @@ public sealed class UpstreamRegistry
         _providers.TryGetValue(upstream, out var provider)
             ? provider
             : throw new InvalidOperationException($"Upstream '{upstream}' is not configured.");
+
+    private static ILlmProvider Create(string name, UpstreamOptions upstream, IHttpClientFactory httpClientFactory, TimeProvider timeProvider) =>
+        upstream.Kind switch
+        {
+            UpstreamKind.Fake => new FakeLlmProvider(timeProvider),
+            UpstreamKind.OpenAICompatible => new OpenAiCompatibleProvider(name, upstream, httpClientFactory),
+            _ => throw new InvalidOperationException($"Unsupported upstream kind '{upstream.Kind}'."),
+        };
 }

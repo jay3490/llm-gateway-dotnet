@@ -50,5 +50,10 @@ public sealed class GatewayOptionsValidator : IValidateOptions<GatewayOptions>
         {
             failures.Add($"Upstream '{name}' has an unknown kind.");
         }
+
+        if (upstream.Kind == UpstreamKind.OpenAICompatible && upstream.BaseUrl is not { IsAbsoluteUri: true })
+        {
+            failures.Add($"Upstream '{name}' needs an absolute BaseUrl.");
+        }
     }
 }
