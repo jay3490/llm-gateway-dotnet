@@ -6,7 +6,7 @@ using LlmGateway.Routing;
 namespace LlmGateway.Endpoints;
 
 /// <summary>Serves <c>POST /v1/chat/completions</c>.</summary>
-public sealed class ChatCompletionHandler(ModelCatalog catalog, ModelRouter router)
+public sealed class ChatCompletionHandler(ModelCatalog catalog, ModelRouter router, SseRelay relay)
 {
     public async Task<IResult> HandleAsync(HttpContext httpContext, ChatCompletionRequest request, CancellationToken cancellationToken)
     {
@@ -23,6 +23,12 @@ public sealed class ChatCompletionHandler(ModelCatalog catalog, ModelRouter rout
             return GatewayErrors.ModelNotFound(request.Model);
         }
 
+        if (request.IsStreaming)
+        {
+            await StreamAsync(httpContext, request, route, cancellationToken);
+            return Results.Empty;
+        }
+
         var routed = await router.ExecuteAsync(
             route,
             (provider, upstreamModel, token) => provider.CompleteChatAsync(request, upstreamModel, token),
@@ -30,6 +36,18 @@ public sealed class ChatCompletionHandler(ModelCatalog catalog, ModelRouter rout
 
         httpContext.Response.Headers[GatewayHeaders.Upstream] = routed.Target.Upstream;
         return Results.Json(routed.Value, GatewayJson.Options);
+    }
+
+    private async Task<StreamResult> StreamAsync(HttpContext httpContext, ChatCompletionRequest request, ModelRoute route, CancellationToken cancellationToken)
+    {
+        var routed = await router.ExecuteAsync(
+            route,
+            (provider, upstreamModel, token) => provider.StreamChatAsync(request, upstreamModel, token),
+            cancellationToken);
+
+        await using var stream = routed.Value;
+        httpContext.Response.Headers[GatewayHeaders.Upstream] = routed.Target.Upstream;
+        return await relay.RelayAsync(httpContext, stream, request.StreamOptions?.IncludeUsage == true, cancellationToken);
     }
 
     private static IResult? Validate(ChatCompletionRequest request)

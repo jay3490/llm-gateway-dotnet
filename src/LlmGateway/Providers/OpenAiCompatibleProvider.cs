@@ -40,6 +40,16 @@ public sealed class OpenAiCompatibleProvider : ILlmProvider
         return await ReadAsync<ChatCompletionResponse>(response, cancellationToken);
     }
 
+    public async Task<IChatChunkSource> StreamChatAsync(ChatCompletionRequest request, string upstreamModel, CancellationToken cancellationToken)
+    {
+        var body = Serialize(request, upstreamModel);
+        body["stream"] = true;
+        body["stream_options"] = new JsonObject { ["include_usage"] = true };
+
+        var response = await SendAsync("chat/completions", body, cancellationToken);
+        return new SseChunkSource(response);
+    }
+
     public async Task<EmbeddingResponse> CreateEmbeddingsAsync(EmbeddingRequest request, string upstreamModel, CancellationToken cancellationToken)
     {
         var body = Serialize(request, upstreamModel);

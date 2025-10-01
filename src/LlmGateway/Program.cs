@@ -24,6 +24,7 @@ builder.Services.AddHttpClient(OpenAiCompatibleProvider.HttpClientName);
 builder.Services.AddSingleton<UpstreamRegistry>();
 builder.Services.AddSingleton<ModelCatalog>();
 builder.Services.AddSingleton<ModelRouter>();
+builder.Services.AddSingleton<SseRelay>();
 builder.Services.AddScoped<ChatCompletionHandler>();
 builder.Services.AddScoped<EmbeddingsHandler>();
 

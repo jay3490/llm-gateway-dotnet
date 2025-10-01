@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using LlmGateway.Contracts;
 using LlmGateway.Tokens;
 
@@ -10,7 +12,7 @@ namespace LlmGateway.Providers;
 /// and no API keys, and gives tests stable responses. Chat replies echo the last user message;
 /// embeddings come from <see cref="HashingEmbedder"/>.
 /// </summary>
-public sealed class FakeLlmProvider(TimeProvider timeProvider) : ILlmProvider
+public sealed partial class FakeLlmProvider(TimeProvider timeProvider) : ILlmProvider
 {
     public Task<ChatCompletionResponse> CompleteChatAsync(ChatCompletionRequest request, string upstreamModel, CancellationToken cancellationToken)
     {
@@ -41,6 +43,52 @@ public sealed class FakeLlmProvider(TimeProvider timeProvider) : ILlmProvider
         return Task.FromResult(response);
     }
 
+    public Task<IChatChunkSource> StreamChatAsync(ChatCompletionRequest request, string upstreamModel, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var reply = BuildReply(request);
+        var id = "chatcmpl-" + ShortHash(upstreamModel + "\n" + reply);
+        var created = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        var promptTokens = TokenEstimator.EstimatePrompt(request.Messages);
+        var completionTokens = TokenEstimator.Estimate(reply);
+
+        JsonObject Chunk(JsonObject? delta, string? finishReason)
+        {
+            var choices = new JsonArray();
+            if (delta is not null)
+            {
+                choices.Add(new JsonObject { ["index"] = 0, ["delta"] = delta, ["finish_reason"] = finishReason });
+            }
+
+            return new JsonObject
+            {
+                ["id"] = id,
+                ["object"] = "chat.completion.chunk",
+                ["created"] = created,
+                ["model"] = upstreamModel,
+                ["choices"] = choices,
+            };
+        }
+
+        var events = new List<string> { Chunk(new JsonObject { ["role"] = "assistant", ["content"] = string.Empty }, null).ToJsonString() };
+        events.AddRange(WordPieces().Split(reply).Where(p => p.Length > 0)
+            .Select(piece => Chunk(new JsonObject { ["content"] = piece }, null).ToJsonString()));
+        events.Add(Chunk(new JsonObject(), "stop").ToJsonString());
+
+        var usageChunk = Chunk(null, null);
+        usageChunk["usage"] = new JsonObject
+        {
+            ["prompt_tokens"] = promptTokens,
+            ["completion_tokens"] = completionTokens,
+            ["total_tokens"] = promptTokens + completionTokens,
+        };
+        events.Add(usageChunk.ToJsonString());
+
+        return Task.FromResult<IChatChunkSource>(new InMemoryChunkSource(events));
+    }
+
     public Task<EmbeddingResponse> CreateEmbeddingsAsync(EmbeddingRequest request, string upstreamModel, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -69,4 +117,8 @@ public sealed class FakeLlmProvider(TimeProvider timeProvider) : ILlmProvider
 
     private static string ShortHash(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)))[..24].ToLowerInvariant();
+
+    /// <summary>Splits after whitespace so each piece is a word with its trailing space.</summary>
+    [GeneratedRegex(@"(?<=\s)")]
+    private static partial Regex WordPieces();
 }
