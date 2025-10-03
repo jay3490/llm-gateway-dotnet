@@ -41,7 +41,38 @@ public sealed class GatewayOptionsValidator : IValidateOptions<GatewayOptions>
             }
         }
 
+        ValidateResilience(options.Resilience, failures);
+
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
+    }
+
+    private static void ValidateResilience(ResilienceOptions resilience, List<string> failures)
+    {
+        if (resilience.AttemptTimeout <= TimeSpan.Zero)
+        {
+            failures.Add("Resilience:AttemptTimeout must be positive.");
+        }
+
+        if (resilience.MaxRetryAttempts < 0)
+        {
+            failures.Add("Resilience:MaxRetryAttempts cannot be negative.");
+        }
+
+        if (resilience.CircuitBreakerFailureRatio is <= 0 or > 1)
+        {
+            failures.Add("Resilience:CircuitBreakerFailureRatio must be in (0, 1].");
+        }
+
+        if (resilience.CircuitBreakerMinimumThroughput < 2)
+        {
+            failures.Add("Resilience:CircuitBreakerMinimumThroughput must be at least 2.");
+        }
+
+        if (resilience.CircuitBreakerSamplingDuration < TimeSpan.FromMilliseconds(500)
+            || resilience.CircuitBreakerBreakDuration < TimeSpan.FromMilliseconds(500))
+        {
+            failures.Add("Resilience circuit breaker durations must be at least 500 ms.");
+        }
     }
 
     private static void ValidateUpstream(string name, UpstreamOptions upstream, List<string> failures)

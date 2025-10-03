@@ -10,6 +10,8 @@ public sealed class GatewayOptions
 
     /// <summary>Model aliases exposed to clients, keyed by the alias clients send in <c>model</c>.</summary>
     public Dictionary<string, ModelRouteOptions> Models { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public ResilienceOptions Resilience { get; init; } = new();
 }
 
 public enum UpstreamKind
@@ -33,6 +35,9 @@ public sealed class UpstreamOptions
 
     /// <summary>Extra headers sent with every request, for example <c>OpenAI-Organization</c>.</summary>
     public Dictionary<string, string> Headers { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Overrides <see cref="ResilienceOptions.AttemptTimeout"/> for this upstream, for example for slow local models.</summary>
+    public TimeSpan? AttemptTimeout { get; set; }
 }
 
 public enum ModelKind
@@ -61,4 +66,25 @@ public sealed class RouteTargetOptions
     public string Model { get; set; } = string.Empty;
 
     public int Weight { get; set; } = 1;
+}
+
+/// <summary>Polly settings applied to every upstream; each upstream gets its own pipeline and circuit.</summary>
+public sealed class ResilienceOptions
+{
+    /// <summary>Time allowed for one attempt to produce response headers. For streams this does not limit the stream's length.</summary>
+    public TimeSpan AttemptTimeout { get; set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>Retries against the same upstream for 5xx, 408, network errors and timeouts. 429 is never retried in place.</summary>
+    public int MaxRetryAttempts { get; set; } = 2;
+
+    /// <summary>Base delay for exponential backoff with jitter.</summary>
+    public TimeSpan RetryBaseDelay { get; set; } = TimeSpan.FromMilliseconds(250);
+
+    public double CircuitBreakerFailureRatio { get; set; } = 0.5;
+
+    public int CircuitBreakerMinimumThroughput { get; set; } = 10;
+
+    public TimeSpan CircuitBreakerSamplingDuration { get; set; } = TimeSpan.FromSeconds(30);
+
+    public TimeSpan CircuitBreakerBreakDuration { get; set; } = TimeSpan.FromSeconds(30);
 }

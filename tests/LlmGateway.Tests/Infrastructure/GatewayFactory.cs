@@ -13,6 +13,13 @@ public sealed class GatewayFactory : WebApplicationFactory<Program>
     private readonly Dictionary<string, string?> _settings = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _targetCounts = new(StringComparer.OrdinalIgnoreCase);
 
+    public GatewayFactory()
+    {
+        // Keep retries fast; individual tests override these where timing matters.
+        WithSetting("Gateway:Resilience:RetryBaseDelay", "00:00:00.001");
+        WithSetting("Gateway:Resilience:AttemptTimeout", "00:00:10");
+    }
+
     public FakeUpstreamHandler Upstreams { get; } = new();
 
     public GatewayFactory WithSetting(string key, string? value)

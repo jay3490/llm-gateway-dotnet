@@ -1,5 +1,6 @@
 using System.Text.Json;
 using LlmGateway.Providers;
+using LlmGateway.Routing;
 using Microsoft.AspNetCore.Diagnostics;
 
 namespace LlmGateway.Errors;
@@ -18,6 +19,7 @@ public sealed partial class GatewayExceptionHandler(ILogger<GatewayExceptionHand
         {
             BadHttpRequestException bad => GatewayErrors.Create(bad.StatusCode, RequestBodyMessage(bad), "invalid_request_error", code: "invalid_request"),
             UpstreamException upstream => UpstreamError(upstream),
+            AllUpstreamsFailedException allFailed => AllUpstreamsFailed(allFailed),
             _ => null,
         };
 
@@ -44,6 +46,17 @@ public sealed partial class GatewayExceptionHandler(ILogger<GatewayExceptionHand
         }
 
         return GatewayErrors.Create(exception.StatusCode, exception.Message, "upstream_error");
+    }
+
+    private static IResult AllUpstreamsFailed(AllUpstreamsFailedException exception)
+    {
+        if (exception.AllRateLimited)
+        {
+            return GatewayErrors.Create(StatusCodes.Status429TooManyRequests, exception.Message, "rate_limit_error", code: "upstream_rate_limited");
+        }
+
+        var status = exception.LastTimedOut ? StatusCodes.Status504GatewayTimeout : StatusCodes.Status502BadGateway;
+        return GatewayErrors.Create(status, exception.Message, "upstream_error", code: "upstream_unavailable");
     }
 
     private static bool IsJson(string body)

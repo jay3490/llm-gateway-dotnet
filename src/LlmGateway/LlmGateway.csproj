@@ -6,6 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Polly.Core" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="LlmGateway.Tests" />
   </ItemGroup>
 

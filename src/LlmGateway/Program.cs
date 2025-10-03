@@ -20,9 +20,12 @@ builder.Services.AddExceptionHandler<GatewayExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddHttpClient(OpenAiCompatibleProvider.HttpClientName);
+// Polly's per-attempt timeout governs upstream calls, so the client itself never times out.
+builder.Services.AddHttpClient(OpenAiCompatibleProvider.HttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan);
 builder.Services.AddSingleton<UpstreamRegistry>();
 builder.Services.AddSingleton<ModelCatalog>();
+builder.Services.AddSingleton(new RoutePlanner(Random.Shared));
+builder.Services.AddSingleton<UpstreamResiliencePipelines>();
 builder.Services.AddSingleton<ModelRouter>();
 builder.Services.AddSingleton<SseRelay>();
 builder.Services.AddScoped<ChatCompletionHandler>();
