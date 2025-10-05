@@ -42,8 +42,31 @@ public sealed class GatewayOptionsValidator : IValidateOptions<GatewayOptions>
         }
 
         ValidateResilience(options.Resilience, failures);
+        ValidateApiKeys(options, failures);
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
+    }
+
+    private static void ValidateApiKeys(GatewayOptions options, List<string> failures)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (name, key) in options.ApiKeys)
+        {
+            if (key.KeyHash.Length != 64 || !key.KeyHash.All(char.IsAsciiHexDigit))
+            {
+                failures.Add($"API key '{name}' needs a KeyHash of 64 hex characters (SHA-256).");
+            }
+            else if (!seen.Add(key.KeyHash))
+            {
+                failures.Add($"API key '{name}' has the same KeyHash as another key.");
+            }
+
+            foreach (var model in key.AllowedModels.Where(m => m != "*" && !options.Models.ContainsKey(m)))
+            {
+                failures.Add($"API key '{name}' allows unknown model '{model}'.");
+            }
+        }
     }
 
     private static void ValidateResilience(ResilienceOptions resilience, List<string> failures)

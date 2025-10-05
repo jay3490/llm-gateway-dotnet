@@ -1,4 +1,6 @@
+using System.Net.Http.Headers;
 using LlmGateway.Providers;
+using LlmGateway.Security;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -10,6 +12,9 @@ namespace LlmGateway.Tests.Infrastructure;
 /// <summary>Hosts the gateway in memory with per-test configuration layered over appsettings.json.</summary>
 public sealed class GatewayFactory : WebApplicationFactory<Program>
 {
+    /// <summary>Admin key with access to every model; clients from <c>CreateClient()</c> send it by default.</summary>
+    public const string AdminKey = "sk-test-admin";
+
     private readonly Dictionary<string, string?> _settings = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _targetCounts = new(StringComparer.OrdinalIgnoreCase);
 
@@ -18,6 +23,7 @@ public sealed class GatewayFactory : WebApplicationFactory<Program>
         // Keep retries fast; individual tests override these where timing matters.
         WithSetting("Gateway:Resilience:RetryBaseDelay", "00:00:00.001");
         WithSetting("Gateway:Resilience:AttemptTimeout", "00:00:10");
+        WithApiKey("test-admin", AdminKey, isAdmin: true);
     }
 
     public FakeUpstreamHandler Upstreams { get; } = new();
@@ -34,6 +40,26 @@ public sealed class GatewayFactory : WebApplicationFactory<Program>
             .WithSetting($"Gateway:Upstreams:{name}:BaseUrl", $"http://{host}/v1")
             .WithSetting($"Gateway:Upstreams:{name}:ApiKey", apiKey);
 
+    public GatewayFactory WithApiKey(string name, string key, bool isAdmin = false, params string[] allowedModels)
+    {
+        WithSetting($"Gateway:ApiKeys:{name}:KeyHash", ApiKeyStore.Hash(key));
+        WithSetting($"Gateway:ApiKeys:{name}:IsAdmin", isAdmin ? "true" : "false");
+        for (var i = 0; i < allowedModels.Length; i++)
+        {
+            WithSetting($"Gateway:ApiKeys:{name}:AllowedModels:{i}", allowedModels[i]);
+        }
+
+        return this;
+    }
+
+    /// <summary>A client that authenticates with <paramref name="key"/>, or sends no key when it is null.</summary>
+    public HttpClient CreateClientWithKey(string? key)
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization = key is null ? null : new AuthenticationHeaderValue("Bearer", key);
+        return client;
+    }
+
     public GatewayFactory WithTarget(string alias, string upstream, string model, int weight = 1, string kind = "Chat") =>
         AddTarget(alias, "Targets", upstream, model, weight, kind);
 
@@ -47,6 +73,13 @@ public sealed class GatewayFactory : WebApplicationFactory<Program>
         builder.ConfigureTestServices(services =>
             services.AddHttpClient(OpenAiCompatibleProvider.HttpClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => Upstreams));
+    }
+
+    protected override void ConfigureClient(HttpClient client)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        base.ConfigureClient(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", AdminKey);
     }
 
     private GatewayFactory AddTarget(string alias, string list, string upstream, string model, int weight, string kind)

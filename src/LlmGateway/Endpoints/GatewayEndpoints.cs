@@ -1,6 +1,7 @@
 using LlmGateway.Contracts;
 using LlmGateway.Errors;
 using LlmGateway.Routing;
+using LlmGateway.Security;
 
 namespace LlmGateway.Endpoints;
 
@@ -11,13 +12,18 @@ public static class GatewayEndpoints
     /// <summary>Maps the OpenAI-compatible <c>/v1</c> surface.</summary>
     public static RouteGroupBuilder MapOpenAiApi(this IEndpointRouteBuilder endpoints)
     {
-        var v1 = endpoints.MapGroup("/v1");
+        var v1 = endpoints.MapGroup("/v1").RequireAuthorization();
 
-        v1.MapGet("/models", (ModelCatalog catalog) =>
-            Results.Json(new ModelListResponse(catalog.Routes.Select(ToCard).ToList()), GatewayJson.Options));
+        v1.MapGet("/models", (HttpContext http, ModelCatalog catalog) =>
+        {
+            var key = http.GetApiKey();
+            var visible = catalog.Routes.Where(r => key.CanUse(r.Alias)).Select(ToCard).ToList();
+            return Results.Json(new ModelListResponse(visible), GatewayJson.Options);
+        });
 
-        v1.MapGet("/models/{id}", (string id, ModelCatalog catalog) =>
+        v1.MapGet("/models/{id}", (string id, HttpContext http, ModelCatalog catalog) =>
             catalog.Routes.FirstOrDefault(r => string.Equals(r.Alias, id, StringComparison.OrdinalIgnoreCase)) is { } route
+                && http.GetApiKey().CanUse(route.Alias)
                 ? Results.Json(ToCard(route), GatewayJson.Options)
                 : GatewayErrors.ModelNotFound(id));
 

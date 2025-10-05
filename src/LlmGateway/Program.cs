@@ -4,6 +4,8 @@ using LlmGateway.Endpoints;
 using LlmGateway.Errors;
 using LlmGateway.Providers;
 using LlmGateway.Routing;
+using LlmGateway.Security;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Options;
 
@@ -28,6 +30,11 @@ builder.Services.AddSingleton(new RoutePlanner(Random.Shared));
 builder.Services.AddSingleton<UpstreamResiliencePipelines>();
 builder.Services.AddSingleton<ModelRouter>();
 builder.Services.AddSingleton<SseRelay>();
+builder.Services.AddSingleton<ApiKeyStore>();
+builder.Services.AddAuthentication(ApiKeyAuthenticationHandler.SchemeName)
+    .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationHandler.SchemeName, null);
+builder.Services.AddAuthorization();
+
 builder.Services.AddScoped<ChatCompletionHandler>();
 builder.Services.AddScoped<EmbeddingsHandler>();
 
@@ -36,6 +43,8 @@ builder.Services.AddHealthChecks();
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapHealthChecks("/health/live");
 app.MapOpenAiApi();

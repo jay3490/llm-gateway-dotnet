@@ -2,6 +2,7 @@ using LlmGateway.Configuration;
 using LlmGateway.Contracts;
 using LlmGateway.Errors;
 using LlmGateway.Routing;
+using LlmGateway.Security;
 
 namespace LlmGateway.Endpoints;
 
@@ -26,6 +27,11 @@ public sealed class EmbeddingsHandler(ModelCatalog catalog, ModelRouter router)
         if (!catalog.TryGet(request.Model, ModelKind.Embedding, out var route))
         {
             return GatewayErrors.ModelNotFound(request.Model);
+        }
+
+        if (!httpContext.GetApiKey().CanUse(route.Alias))
+        {
+            return GatewayErrors.ModelNotAllowed(route.Alias);
         }
 
         var routed = await router.ExecuteAsync(

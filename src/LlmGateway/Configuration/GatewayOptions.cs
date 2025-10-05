@@ -12,6 +12,9 @@ public sealed class GatewayOptions
     public Dictionary<string, ModelRouteOptions> Models { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 
     public ResilienceOptions Resilience { get; init; } = new();
+
+    /// <summary>Client API keys keyed by a display name used in logs and usage reports.</summary>
+    public Dictionary<string, ApiKeyOptions> ApiKeys { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 public enum UpstreamKind
@@ -87,4 +90,16 @@ public sealed class ResilienceOptions
     public TimeSpan CircuitBreakerSamplingDuration { get; set; } = TimeSpan.FromSeconds(30);
 
     public TimeSpan CircuitBreakerBreakDuration { get; set; } = TimeSpan.FromSeconds(30);
+}
+
+public sealed class ApiKeyOptions
+{
+    /// <summary>Lower-case hex SHA-256 of the key. The key itself is never stored in configuration.</summary>
+    public string KeyHash { get; set; } = string.Empty;
+
+    /// <summary>Model aliases this key may use. Empty, or a single <c>*</c>, allows every alias.</summary>
+    public List<string> AllowedModels { get; init; } = [];
+
+    /// <summary>Grants access to the <c>/admin</c> endpoints.</summary>
+    public bool IsAdmin { get; set; }
 }
