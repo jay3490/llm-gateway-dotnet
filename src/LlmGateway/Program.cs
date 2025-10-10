@@ -3,6 +3,7 @@ using LlmGateway.Contracts;
 using LlmGateway.Endpoints;
 using LlmGateway.Errors;
 using LlmGateway.Providers;
+using LlmGateway.RateLimiting;
 using LlmGateway.Routing;
 using LlmGateway.Security;
 using Microsoft.AspNetCore.Authentication;
@@ -31,6 +32,7 @@ builder.Services.AddSingleton<UpstreamResiliencePipelines>();
 builder.Services.AddSingleton<ModelRouter>();
 builder.Services.AddSingleton<SseRelay>();
 builder.Services.AddSingleton<ApiKeyStore>();
+builder.Services.AddSingleton<KeyRateLimiter>();
 builder.Services.AddAuthentication(ApiKeyAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationHandler.SchemeName, null);
 builder.Services.AddAuthorization();

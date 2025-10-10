@@ -6,7 +6,14 @@ using Microsoft.Extensions.Options;
 namespace LlmGateway.Security;
 
 /// <summary>A client API key as the gateway sees it after authentication.</summary>
-public sealed record ApiKeyDefinition(string Name, IReadOnlySet<string> AllowedModels, bool IsAdmin)
+/// <param name="RequestsPerMinute">Zero means unlimited.</param>
+/// <param name="TokensPerMinute">Zero means unlimited.</param>
+public sealed record ApiKeyDefinition(
+    string Name,
+    IReadOnlySet<string> AllowedModels,
+    bool IsAdmin,
+    int RequestsPerMinute = 0,
+    int TokensPerMinute = 0)
 {
     public bool AllowsAllModels => AllowedModels.Count == 0 || AllowedModels.Contains("*");
 
@@ -30,7 +37,9 @@ public sealed class ApiKeyStore
             pair => new ApiKeyDefinition(
                 pair.Key,
                 pair.Value.AllowedModels.ToHashSet(StringComparer.OrdinalIgnoreCase),
-                pair.Value.IsAdmin),
+                pair.Value.IsAdmin,
+                pair.Value.RequestsPerMinute,
+                pair.Value.TokensPerMinute),
             StringComparer.Ordinal);
     }
 

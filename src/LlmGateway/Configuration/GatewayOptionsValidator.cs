@@ -62,6 +62,11 @@ public sealed class GatewayOptionsValidator : IValidateOptions<GatewayOptions>
                 failures.Add($"API key '{name}' has the same KeyHash as another key.");
             }
 
+            if (key.RequestsPerMinute < 0 || key.TokensPerMinute < 0)
+            {
+                failures.Add($"API key '{name}' has a negative rate limit.");
+            }
+
             foreach (var model in key.AllowedModels.Where(m => m != "*" && !options.Models.ContainsKey(m)))
             {
                 failures.Add($"API key '{name}' allows unknown model '{model}'.");

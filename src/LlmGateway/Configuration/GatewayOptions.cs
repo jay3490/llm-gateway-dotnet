@@ -102,4 +102,10 @@ public sealed class ApiKeyOptions
 
     /// <summary>Grants access to the <c>/admin</c> endpoints.</summary>
     public bool IsAdmin { get; set; }
+
+    /// <summary>Request budget per minute, refilled continuously. Zero or unset means unlimited.</summary>
+    public int RequestsPerMinute { get; set; }
+
+    /// <summary>Token budget (prompt plus completion) per minute, refilled continuously. Zero or unset means unlimited.</summary>
+    public int TokensPerMinute { get; set; }
 }

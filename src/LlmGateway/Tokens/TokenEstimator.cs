@@ -16,6 +16,10 @@ public static class TokenEstimator
     public static int Estimate(string? text) =>
         string.IsNullOrEmpty(text) ? 0 : (text.Length + CharactersPerToken - 1) / CharactersPerToken;
 
+    /// <summary>Estimate for a text of <paramref name="characters"/> characters whose content is no longer at hand.</summary>
+    public static int EstimateFromLength(int characters) =>
+        characters <= 0 ? 0 : (characters + CharactersPerToken - 1) / CharactersPerToken;
+
     public static int EstimatePrompt(IEnumerable<ChatMessage> messages)
     {
         ArgumentNullException.ThrowIfNull(messages);
