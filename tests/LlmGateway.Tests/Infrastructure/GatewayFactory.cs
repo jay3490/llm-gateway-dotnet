@@ -4,6 +4,7 @@ using LlmGateway.Security;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -17,6 +18,7 @@ public sealed class GatewayFactory : WebApplicationFactory<Program>
 
     private readonly Dictionary<string, string?> _settings = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _targetCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"llm-gateway-tests-{Guid.NewGuid():N}.db");
 
     public GatewayFactory()
     {
@@ -24,6 +26,7 @@ public sealed class GatewayFactory : WebApplicationFactory<Program>
         WithSetting("Gateway:Resilience:RetryBaseDelay", "00:00:00.001");
         WithSetting("Gateway:Resilience:AttemptTimeout", "00:00:10");
         WithApiKey("test-admin", AdminKey, isAdmin: true);
+        WithSetting("ConnectionStrings:Usage", $"Data Source={_databasePath}");
     }
 
     public FakeUpstreamHandler Upstreams { get; } = new();
@@ -80,6 +83,16 @@ public sealed class GatewayFactory : WebApplicationFactory<Program>
         ArgumentNullException.ThrowIfNull(client);
         base.ConfigureClient(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", AdminKey);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        if (disposing)
+        {
+            SqliteConnection.ClearAllPools();
+            File.Delete(_databasePath);
+        }
     }
 
     private GatewayFactory AddTarget(string alias, string list, string upstream, string model, int weight, string kind)

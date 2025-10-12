@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using LlmGateway.Configuration;
 using LlmGateway.Contracts;
 using LlmGateway.Errors;
@@ -5,16 +6,23 @@ using LlmGateway.RateLimiting;
 using LlmGateway.Routing;
 using LlmGateway.Security;
 using LlmGateway.Tokens;
+using LlmGateway.Usage;
 
 namespace LlmGateway.Endpoints;
 
 /// <summary>Serves <c>POST /v1/embeddings</c>.</summary>
-public sealed class EmbeddingsHandler(ModelCatalog catalog, ModelRouter router, KeyRateLimiter rateLimiter)
+public sealed class EmbeddingsHandler(
+    ModelCatalog catalog,
+    ModelRouter router,
+    KeyRateLimiter rateLimiter,
+    UsageRecorder usage,
+    TimeProvider timeProvider)
 {
     public async Task<IResult> HandleAsync(HttpContext httpContext, EmbeddingRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(httpContext);
         ArgumentNullException.ThrowIfNull(request);
+        var started = Stopwatch.GetTimestamp();
 
         if (string.IsNullOrWhiteSpace(request.Model))
         {
@@ -50,7 +58,21 @@ public sealed class EmbeddingsHandler(ModelCatalog catalog, ModelRouter router, 
             (provider, upstreamModel, token) => provider.CreateEmbeddingsAsync(request, upstreamModel, token),
             cancellationToken);
 
-        lease.Settle(routed.Value.Usage?.TotalTokens ?? estimate);
+        var tokens = routed.Value.Usage?.TotalTokens ?? estimate;
+        lease.Settle(tokens);
+        usage.Record(new UsageRecord
+        {
+            TimestampUtc = timeProvider.GetUtcNow().UtcDateTime,
+            ApiKeyName = apiKey.Name,
+            Endpoint = "embeddings",
+            ModelAlias = route.Alias,
+            Upstream = routed.Target.Upstream,
+            UpstreamModel = routed.Target.Model,
+            PromptTokens = routed.Value.Usage?.PromptTokens ?? estimate,
+            TotalTokens = tokens,
+            Estimated = routed.Value.Usage is null,
+            LatencyMs = (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+        });
         httpContext.Response.Headers[GatewayHeaders.Upstream] = routed.Target.Upstream;
         return Results.Json(routed.Value, GatewayJson.Options);
     }

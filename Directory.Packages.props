@@ -3,6 +3,9 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
+    <!-- EF Core stays on the 8.0 LTS servicing line to match net8.0 -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.33" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.33" />
     <PackageVersion Include="Polly.Core" Version="8.6.6" />
   </ItemGroup>
   <ItemGroup>

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using LlmGateway.Configuration;
 using LlmGateway.Contracts;
 using LlmGateway.Errors;
@@ -5,6 +6,7 @@ using LlmGateway.RateLimiting;
 using LlmGateway.Routing;
 using LlmGateway.Security;
 using LlmGateway.Tokens;
+using LlmGateway.Usage;
 
 namespace LlmGateway.Endpoints;
 
@@ -13,12 +15,17 @@ public sealed class ChatCompletionHandler(
     ModelCatalog catalog,
     ModelRouter router,
     KeyRateLimiter rateLimiter,
-    SseRelay relay)
+    SseRelay relay,
+    UsageRecorder usage,
+    TimeProvider timeProvider)
 {
+    private const string Endpoint = "chat.completions";
+
     public async Task<IResult> HandleAsync(HttpContext httpContext, ChatCompletionRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(httpContext);
         ArgumentNullException.ThrowIfNull(request);
+        var started = Stopwatch.GetTimestamp();
 
         if (Validate(request) is { } invalid)
         {
@@ -47,8 +54,11 @@ public sealed class ChatCompletionHandler(
 
         if (request.IsStreaming)
         {
-            var streamed = await StreamAsync(httpContext, request, route, cancellationToken);
-            lease.Settle(streamed.Usage?.TotalTokens ?? promptEstimate + TokenEstimator.EstimateFromLength(streamed.CompletionCharacters));
+            var (target, streamed) = await StreamAsync(httpContext, request, route, cancellationToken);
+            var streamUsage = streamed.Usage
+                ?? EstimatedUsage(promptEstimate, TokenEstimator.EstimateFromLength(streamed.CompletionCharacters));
+            lease.Settle(streamUsage.TotalTokens);
+            Record(apiKey, route, target, streamUsage, estimated: streamed.Usage is null, streamed: true, started);
             return Results.Empty;
         }
 
@@ -57,12 +67,19 @@ public sealed class ChatCompletionHandler(
             (provider, upstreamModel, token) => provider.CompleteChatAsync(request, upstreamModel, token),
             cancellationToken);
 
-        lease.Settle(routed.Value.Usage?.TotalTokens ?? promptEstimate);
+        var completionUsage = routed.Value.Usage ?? EstimatedUsage(promptEstimate, EstimateCompletion(routed.Value));
+        lease.Settle(completionUsage.TotalTokens);
+        Record(apiKey, route, routed.Target, completionUsage, estimated: routed.Value.Usage is null, streamed: false, started);
+
         httpContext.Response.Headers[GatewayHeaders.Upstream] = routed.Target.Upstream;
         return Results.Json(routed.Value, GatewayJson.Options);
     }
 
-    private async Task<StreamResult> StreamAsync(HttpContext httpContext, ChatCompletionRequest request, ModelRoute route, CancellationToken cancellationToken)
+    private async Task<(RouteTarget Target, StreamResult Result)> StreamAsync(
+        HttpContext httpContext,
+        ChatCompletionRequest request,
+        ModelRoute route,
+        CancellationToken cancellationToken)
     {
         var routed = await router.ExecuteAsync(
             route,
@@ -71,8 +88,36 @@ public sealed class ChatCompletionHandler(
 
         await using var stream = routed.Value;
         httpContext.Response.Headers[GatewayHeaders.Upstream] = routed.Target.Upstream;
-        return await relay.RelayAsync(httpContext, stream, request.StreamOptions?.IncludeUsage == true, cancellationToken);
+        var result = await relay.RelayAsync(httpContext, stream, request.StreamOptions?.IncludeUsage == true, cancellationToken);
+        return (routed.Target, result);
     }
+
+    private void Record(ApiKeyDefinition apiKey, ModelRoute route, RouteTarget target, TokenUsage tokens, bool estimated, bool streamed, long started) =>
+        usage.Record(new UsageRecord
+        {
+            TimestampUtc = timeProvider.GetUtcNow().UtcDateTime,
+            ApiKeyName = apiKey.Name,
+            Endpoint = Endpoint,
+            ModelAlias = route.Alias,
+            Upstream = target.Upstream,
+            UpstreamModel = target.Model,
+            PromptTokens = tokens.PromptTokens,
+            CompletionTokens = tokens.CompletionTokens,
+            TotalTokens = tokens.TotalTokens,
+            Streamed = streamed,
+            Estimated = estimated,
+            LatencyMs = (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+        });
+
+    private static TokenUsage EstimatedUsage(int promptTokens, int completionTokens) => new()
+    {
+        PromptTokens = promptTokens,
+        CompletionTokens = completionTokens,
+        TotalTokens = promptTokens + completionTokens,
+    };
+
+    private static int EstimateCompletion(ChatCompletionResponse response) =>
+        response.Choices.Sum(c => TokenEstimator.Estimate(c.Message?.GetText()));
 
     private static IResult? Validate(ChatCompletionRequest request)
     {

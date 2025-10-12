@@ -6,8 +6,10 @@ using LlmGateway.Providers;
 using LlmGateway.RateLimiting;
 using LlmGateway.Routing;
 using LlmGateway.Security;
+using LlmGateway.Usage;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -35,7 +37,14 @@ builder.Services.AddSingleton<ApiKeyStore>();
 builder.Services.AddSingleton<KeyRateLimiter>();
 builder.Services.AddAuthentication(ApiKeyAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationHandler.SchemeName, null);
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy(GatewayPolicies.Admin, policy => policy.RequireRole(ApiKeyAuthenticationHandler.AdminRole));
+
+builder.Services.AddDbContextFactory<UsageDbContext>((services, options) =>
+    options.UseSqlite(services.GetRequiredService<IConfiguration>().GetConnectionString("Usage") ?? "Data Source=data/usage.db"));
+builder.Services.AddSingleton<UsageRecorder>();
+builder.Services.AddHostedService<UsageWriter>();
+builder.Services.AddSingleton<UsageReportService>();
 
 builder.Services.AddScoped<ChatCompletionHandler>();
 builder.Services.AddScoped<EmbeddingsHandler>();
@@ -50,6 +59,7 @@ app.UseAuthorization();
 
 app.MapHealthChecks("/health/live");
 app.MapOpenAiApi();
+app.MapAdminApi();
 
 app.Run();
 

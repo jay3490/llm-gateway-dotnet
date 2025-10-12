@@ -19,6 +19,9 @@ csharp_style_namespace_declarations = file_scoped:warning
 csharp_style_var_for_built_in_types = true:suggestion
 dotnet_sort_system_directives_first = true
 
+[src/LlmGateway/Usage/Migrations/*.cs]
+generated_code = true
+
 [tests/**/*.cs]
 # Test names use underscores to read as sentences.
 dotnet_diagnostic.CA1707.severity = none
