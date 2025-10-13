@@ -1,5 +1,6 @@
 using LlmGateway.Contracts;
 using LlmGateway.Errors;
+using LlmGateway.Guardrails;
 using LlmGateway.Routing;
 using LlmGateway.Security;
 
@@ -28,10 +29,12 @@ public static class GatewayEndpoints
                 : GatewayErrors.ModelNotFound(id));
 
         v1.MapPost("/chat/completions", (HttpContext http, ChatCompletionRequest request, ChatCompletionHandler handler, CancellationToken ct) =>
-            handler.HandleAsync(http, request, ct));
+            handler.HandleAsync(http, request, ct))
+            .AddEndpointFilter<GuardrailsFilter>();
 
         v1.MapPost("/embeddings", (HttpContext http, EmbeddingRequest request, EmbeddingsHandler handler, CancellationToken ct) =>
-            handler.HandleAsync(http, request, ct));
+            handler.HandleAsync(http, request, ct))
+            .AddEndpointFilter<GuardrailsFilter>();
 
         return v1;
     }

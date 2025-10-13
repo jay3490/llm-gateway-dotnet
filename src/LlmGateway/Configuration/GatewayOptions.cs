@@ -15,6 +15,8 @@ public sealed class GatewayOptions
 
     /// <summary>Client API keys keyed by a display name used in logs and usage reports.</summary>
     public Dictionary<string, ApiKeyOptions> ApiKeys { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public GuardrailOptions Guardrails { get; init; } = new();
 }
 
 public enum UpstreamKind
@@ -108,4 +110,16 @@ public sealed class ApiKeyOptions
 
     /// <summary>Token budget (prompt plus completion) per minute, refilled continuously. Zero or unset means unlimited.</summary>
     public int TokensPerMinute { get; set; }
+}
+
+public sealed class GuardrailOptions
+{
+    /// <summary>Largest accepted request body.</summary>
+    public long MaxRequestBytes { get; set; } = 1024 * 1024;
+
+    /// <summary>Replace e-mail addresses, phone numbers and card numbers in prompts before forwarding them.</summary>
+    public bool RedactPii { get; set; }
+
+    /// <summary>Requests containing any of these terms as a whole word, in any case, are rejected.</summary>
+    public List<string> BlockedTerms { get; init; } = [];
 }

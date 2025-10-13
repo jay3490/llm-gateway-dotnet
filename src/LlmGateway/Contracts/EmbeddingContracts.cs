@@ -46,6 +46,33 @@ public sealed class EmbeddingRequest
     }
 }
 
+public static class EmbeddingRequestExtensions
+{
+    /// <summary>Applies <paramref name="rewrite"/> to each text input; non-text inputs are left alone.</summary>
+    public static void RewriteTextInputs(this EmbeddingRequest request, Func<string, string> rewrite)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(rewrite);
+
+        switch (request.Input)
+        {
+            case JsonValue value when value.TryGetValue(out string? text):
+                request.Input = JsonValue.Create(rewrite(text));
+                break;
+            case JsonArray items:
+                for (var i = 0; i < items.Count; i++)
+                {
+                    if (items[i] is JsonValue item && item.TryGetValue(out string? s))
+                    {
+                        items[i] = JsonValue.Create(rewrite(s));
+                    }
+                }
+
+                break;
+        }
+    }
+}
+
 public sealed class EmbeddingResponse
 {
     [JsonPropertyName("object")]

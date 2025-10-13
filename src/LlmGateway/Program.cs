@@ -2,6 +2,7 @@ using LlmGateway.Configuration;
 using LlmGateway.Contracts;
 using LlmGateway.Endpoints;
 using LlmGateway.Errors;
+using LlmGateway.Guardrails;
 using LlmGateway.Providers;
 using LlmGateway.RateLimiting;
 using LlmGateway.Routing;
@@ -46,6 +47,7 @@ builder.Services.AddSingleton<UsageRecorder>();
 builder.Services.AddHostedService<UsageWriter>();
 builder.Services.AddSingleton<UsageReportService>();
 
+builder.Services.AddSingleton<BlockedTermPolicy>();
 builder.Services.AddScoped<ChatCompletionHandler>();
 builder.Services.AddScoped<EmbeddingsHandler>();
 
@@ -54,6 +56,7 @@ builder.Services.AddHealthChecks();
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UseMiddleware<RequestSizeLimitMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 
