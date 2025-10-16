@@ -17,6 +17,8 @@ public sealed class GatewayOptions
     public Dictionary<string, ApiKeyOptions> ApiKeys { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 
     public GuardrailOptions Guardrails { get; init; } = new();
+
+    public CacheOptions Cache { get; init; } = new();
 }
 
 public enum UpstreamKind
@@ -122,4 +124,16 @@ public sealed class GuardrailOptions
 
     /// <summary>Requests containing any of these terms as a whole word, in any case, are rejected.</summary>
     public List<string> BlockedTerms { get; init; } = [];
+}
+
+public sealed class CacheOptions
+{
+    /// <summary>Serve repeated non-streaming chat requests from the cache.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>How long a cached response stays valid.</summary>
+    public TimeSpan Ttl { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>Upper bound on entries held by the in-memory store.</summary>
+    public int MaxEntries { get; set; } = 10_000;
 }

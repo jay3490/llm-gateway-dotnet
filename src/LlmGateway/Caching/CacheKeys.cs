@@ -1,0 +1,50 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using LlmGateway.Contracts;
+
+namespace LlmGateway.Caching;
+
+/// <summary>Derives cache keys from requests in a way that ignores JSON key order and transport-only fields.</summary>
+public static class CacheKeys
+{
+    /// <summary>Fields that do not change what the model generates, so they must not split the cache.</summary>
+    private static readonly string[] TransportFields = ["stream", "stream_options", "user", "metadata", "store"];
+
+    /// <summary>Key for an exact match: alias plus the whole canonical request.</summary>
+    public static string Exact(string alias, ChatCompletionRequest request)
+    {
+        var canonical = Canonical(alias, request);
+        return Hash(canonical.ToJsonString());
+    }
+
+    internal static JsonObject Canonical(string alias, ChatCompletionRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(alias);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var node = JsonSerializer.SerializeToNode(request, GatewayJson.Options)!.AsObject();
+        node["model"] = alias.ToLowerInvariant();
+        foreach (var field in TransportFields)
+        {
+            node.Remove(field);
+        }
+
+        return (JsonObject)Sorted(node)!;
+    }
+
+    internal static string Hash(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+
+    /// <summary>A copy of <paramref name="node"/> with object properties in ordinal order at every level.</summary>
+    private static JsonNode? Sorted(JsonNode? node) => node switch
+    {
+        JsonObject obj => new JsonObject(obj
+            .OrderBy(p => p.Key, StringComparer.Ordinal)
+            .Select(p => KeyValuePair.Create(p.Key, Sorted(p.Value)))),
+        JsonArray array => new JsonArray(array.Select(Sorted).ToArray()),
+        null => null,
+        _ => node.DeepClone(),
+    };
+}

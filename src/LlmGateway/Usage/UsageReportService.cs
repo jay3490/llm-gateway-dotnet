@@ -7,7 +7,8 @@ public sealed record UsageTotals(
     [property: JsonPropertyName("requests")] int Requests,
     [property: JsonPropertyName("prompt_tokens")] long PromptTokens,
     [property: JsonPropertyName("completion_tokens")] long CompletionTokens,
-    [property: JsonPropertyName("total_tokens")] long TotalTokens);
+    [property: JsonPropertyName("total_tokens")] long TotalTokens,
+    [property: JsonPropertyName("cache_hits")] int CacheHits);
 
 public sealed record UsageGroup(
     [property: JsonPropertyName("name")] string Name,
@@ -41,7 +42,8 @@ public sealed class UsageReportService(IDbContextFactory<UsageDbContext> context
             byKey.Sum(g => g.Usage.Requests),
             byKey.Sum(g => g.Usage.PromptTokens),
             byKey.Sum(g => g.Usage.CompletionTokens),
-            byKey.Sum(g => g.Usage.TotalTokens));
+            byKey.Sum(g => g.Usage.TotalTokens),
+            byKey.Sum(g => g.Usage.CacheHits));
 
         return new UsageReport(fromUtc, toUtc, totals, byKey, byModel);
     }
@@ -56,13 +58,14 @@ public sealed class UsageReportService(IDbContextFactory<UsageDbContext> context
                 Prompt = g.Sum(u => (long)u.PromptTokens),
                 Completion = g.Sum(u => (long)u.CompletionTokens),
                 Total = g.Sum(u => (long)u.TotalTokens),
+                CacheHits = g.Count(u => u.CacheResult != UsageCacheResults.None && u.CacheResult != UsageCacheResults.Miss),
             })
             .ToListAsync(cancellationToken);
 
         return rows
             .OrderByDescending(r => r.Total)
             .ThenBy(r => r.Key, StringComparer.Ordinal)
-            .Select(r => new UsageGroup(r.Key, new UsageTotals(r.Requests, r.Prompt, r.Completion, r.Total)))
+            .Select(r => new UsageGroup(r.Key, new UsageTotals(r.Requests, r.Prompt, r.Completion, r.Total, r.CacheHits)))
             .ToList();
     }
 }

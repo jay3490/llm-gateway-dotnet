@@ -30,4 +30,14 @@ public sealed class UsageRecord
     public bool Estimated { get; set; }
 
     public int LatencyMs { get; set; }
+
+    /// <summary><c>none</c> when the cache was not consulted, otherwise <c>miss</c> or the kind of hit.</summary>
+    public string CacheResult { get; set; } = UsageCacheResults.None;
+}
+
+public static class UsageCacheResults
+{
+    public const string None = "none";
+    public const string Miss = "miss";
+    public const string Exact = "exact";
 }

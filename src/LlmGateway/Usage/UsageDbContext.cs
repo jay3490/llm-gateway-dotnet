@@ -18,6 +18,7 @@ public sealed class UsageDbContext(DbContextOptions<UsageDbContext> options) : D
         usage.Property(u => u.ModelAlias).HasMaxLength(128);
         usage.Property(u => u.Upstream).HasMaxLength(128);
         usage.Property(u => u.UpstreamModel).HasMaxLength(256);
+        usage.Property(u => u.CacheResult).HasMaxLength(16).HasDefaultValue(UsageCacheResults.None);
         usage.HasIndex(u => u.TimestampUtc);
         usage.HasIndex(u => new { u.ApiKeyName, u.TimestampUtc });
     }

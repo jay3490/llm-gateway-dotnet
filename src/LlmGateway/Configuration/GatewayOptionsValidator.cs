@@ -44,6 +44,11 @@ public sealed class GatewayOptionsValidator : IValidateOptions<GatewayOptions>
         ValidateResilience(options.Resilience, failures);
         ValidateApiKeys(options, failures);
 
+        if (options.Cache.Ttl <= TimeSpan.Zero || options.Cache.MaxEntries <= 0)
+        {
+            failures.Add("Cache:Ttl and Cache:MaxEntries must be positive.");
+        }
+
         if (options.Guardrails.MaxRequestBytes <= 0)
         {
             failures.Add("Guardrails:MaxRequestBytes must be positive.");

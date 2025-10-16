@@ -27,6 +27,9 @@ public sealed class GatewayFactory : WebApplicationFactory<Program>
         WithSetting("Gateway:Resilience:AttemptTimeout", "00:00:10");
         WithApiKey("test-admin", AdminKey, isAdmin: true);
         WithSetting("ConnectionStrings:Usage", $"Data Source={_databasePath}");
+
+        // Most tests send identical requests and expect each to reach the upstream; cache tests opt back in.
+        WithSetting("Gateway:Cache:Enabled", "false");
     }
 
     public FakeUpstreamHandler Upstreams { get; } = new();

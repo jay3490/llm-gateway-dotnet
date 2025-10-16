@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using LlmGateway.Caching;
 using LlmGateway.Configuration;
 using LlmGateway.Contracts;
 using LlmGateway.Errors;
@@ -17,6 +18,7 @@ public sealed class ChatCompletionHandler(
     KeyRateLimiter rateLimiter,
     SseRelay relay,
     UsageRecorder usage,
+    CompletionCache cache,
     TimeProvider timeProvider)
 {
     private const string Endpoint = "chat.completions";
@@ -58,8 +60,17 @@ public sealed class ChatCompletionHandler(
             var streamUsage = streamed.Usage
                 ?? EstimatedUsage(promptEstimate, TokenEstimator.EstimateFromLength(streamed.CompletionCharacters));
             lease.Settle(streamUsage.TotalTokens);
-            Record(apiKey, route, target, streamUsage, estimated: streamed.Usage is null, streamed: true, started);
+            Record(apiKey, route, target, streamUsage, estimated: streamed.Usage is null, streamed: true, CacheOutcome.None, started);
             return Results.Empty;
+        }
+
+        var lookup = await LookupCacheAsync(httpContext, route, request, cancellationToken);
+        if (lookup is { IsHit: true, Response: { } cached })
+        {
+            // A cache hit costs no upstream tokens, so the whole reservation goes back.
+            lease.Settle(0);
+            Record(apiKey, route, target: null, new TokenUsage(), estimated: false, streamed: false, lookup.Outcome, started);
+            return Results.Json(cached, GatewayJson.Options);
         }
 
         var routed = await router.ExecuteAsync(
@@ -69,11 +80,40 @@ public sealed class ChatCompletionHandler(
 
         var completionUsage = routed.Value.Usage ?? EstimatedUsage(promptEstimate, EstimateCompletion(routed.Value));
         lease.Settle(completionUsage.TotalTokens);
-        Record(apiKey, route, routed.Target, completionUsage, estimated: routed.Value.Usage is null, streamed: false, started);
+        Record(apiKey, route, routed.Target, completionUsage, estimated: routed.Value.Usage is null, streamed: false, lookup.Outcome, started);
+        await cache.StoreAsync(lookup, routed.Value, cancellationToken);
 
         httpContext.Response.Headers[GatewayHeaders.Upstream] = routed.Target.Upstream;
         return Results.Json(routed.Value, GatewayJson.Options);
     }
+
+    private async Task<CacheLookup> LookupCacheAsync(HttpContext httpContext, ModelRoute route, ChatCompletionRequest request, CancellationToken cancellationToken)
+    {
+        if (!cache.Enabled)
+        {
+            return CacheLookup.NotConsulted;
+        }
+
+        if (BypassRequested(httpContext.Request))
+        {
+            httpContext.Response.Headers[GatewayHeaders.Cache] = "bypass";
+            return CacheLookup.NotConsulted;
+        }
+
+        var lookup = await cache.LookupAsync(route, request, cancellationToken);
+        httpContext.Response.Headers[GatewayHeaders.Cache] = lookup.Outcome switch
+        {
+            CacheOutcome.ExactHit => "hit-exact",
+            _ => "miss",
+        };
+
+        return lookup;
+    }
+
+    private static bool BypassRequested(HttpRequest request) =>
+        string.Equals(request.Headers[GatewayHeaders.Cache], "bypass", StringComparison.OrdinalIgnoreCase)
+        || request.Headers.CacheControl.Any(v => v is not null
+            && (v.Contains("no-cache", StringComparison.OrdinalIgnoreCase) || v.Contains("no-store", StringComparison.OrdinalIgnoreCase)));
 
     private async Task<(RouteTarget Target, StreamResult Result)> StreamAsync(
         HttpContext httpContext,
@@ -92,21 +132,35 @@ public sealed class ChatCompletionHandler(
         return (routed.Target, result);
     }
 
-    private void Record(ApiKeyDefinition apiKey, ModelRoute route, RouteTarget target, TokenUsage tokens, bool estimated, bool streamed, long started) =>
+    private void Record(
+        ApiKeyDefinition apiKey,
+        ModelRoute route,
+        RouteTarget? target,
+        TokenUsage tokens,
+        bool estimated,
+        bool streamed,
+        CacheOutcome cacheOutcome,
+        long started) =>
         usage.Record(new UsageRecord
         {
             TimestampUtc = timeProvider.GetUtcNow().UtcDateTime,
             ApiKeyName = apiKey.Name,
             Endpoint = Endpoint,
             ModelAlias = route.Alias,
-            Upstream = target.Upstream,
-            UpstreamModel = target.Model,
+            Upstream = target?.Upstream ?? string.Empty,
+            UpstreamModel = target?.Model ?? string.Empty,
             PromptTokens = tokens.PromptTokens,
             CompletionTokens = tokens.CompletionTokens,
             TotalTokens = tokens.TotalTokens,
             Streamed = streamed,
             Estimated = estimated,
             LatencyMs = (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+            CacheResult = cacheOutcome switch
+            {
+                CacheOutcome.Miss => UsageCacheResults.Miss,
+                CacheOutcome.ExactHit => UsageCacheResults.Exact,
+                _ => UsageCacheResults.None,
+            },
         });
 
     private static TokenUsage EstimatedUsage(int promptTokens, int completionTokens) => new()

@@ -28,6 +28,13 @@ namespace LlmGateway.Usage.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("CacheResult")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("none");
+
                     b.Property<int>("CompletionTokens")
                         .HasColumnType("INTEGER");
 

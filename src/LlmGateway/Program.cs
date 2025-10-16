@@ -1,3 +1,4 @@
+using LlmGateway.Caching;
 using LlmGateway.Configuration;
 using LlmGateway.Contracts;
 using LlmGateway.Endpoints;
@@ -48,6 +49,8 @@ builder.Services.AddHostedService<UsageWriter>();
 builder.Services.AddSingleton<UsageReportService>();
 
 builder.Services.AddSingleton<BlockedTermPolicy>();
+builder.Services.AddSingleton<ICompletionCacheStore, InMemoryCompletionCacheStore>();
+builder.Services.AddSingleton<CompletionCache>();
 builder.Services.AddScoped<ChatCompletionHandler>();
 builder.Services.AddScoped<EmbeddingsHandler>();
 
