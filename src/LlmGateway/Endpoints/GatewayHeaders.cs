@@ -7,8 +7,11 @@ public static class GatewayHeaders
     public const string Upstream = "X-Gateway-Upstream";
 
     /// <summary>
-    /// On responses: how the cache was used (<c>hit-exact</c>, <c>miss</c> or <c>bypass</c>).
+    /// On responses: how the cache was used (<c>hit-exact</c>, <c>hit-semantic</c>, <c>miss</c> or <c>bypass</c>).
     /// On requests: <c>bypass</c> skips the cache for that request, as does <c>Cache-Control: no-cache</c>.
     /// </summary>
     public const string Cache = "X-Gateway-Cache";
+
+    /// <summary>Cosine similarity of the cached prompt that answered a semantic hit.</summary>
+    public const string CacheSimilarity = "X-Gateway-Cache-Similarity";
 }

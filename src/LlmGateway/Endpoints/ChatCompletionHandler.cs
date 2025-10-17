@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using LlmGateway.Caching;
 using LlmGateway.Configuration;
 using LlmGateway.Contracts;
@@ -104,8 +105,14 @@ public sealed class ChatCompletionHandler(
         httpContext.Response.Headers[GatewayHeaders.Cache] = lookup.Outcome switch
         {
             CacheOutcome.ExactHit => "hit-exact",
+            CacheOutcome.SemanticHit => "hit-semantic",
             _ => "miss",
         };
+
+        if (lookup.Outcome == CacheOutcome.SemanticHit)
+        {
+            httpContext.Response.Headers[GatewayHeaders.CacheSimilarity] = lookup.Similarity.ToString("0.0000", CultureInfo.InvariantCulture);
+        }
 
         return lookup;
     }
@@ -159,6 +166,7 @@ public sealed class ChatCompletionHandler(
             {
                 CacheOutcome.Miss => UsageCacheResults.Miss,
                 CacheOutcome.ExactHit => UsageCacheResults.Exact,
+                CacheOutcome.SemanticHit => UsageCacheResults.Semantic,
                 _ => UsageCacheResults.None,
             },
         });

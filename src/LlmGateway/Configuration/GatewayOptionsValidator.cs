@@ -49,6 +49,19 @@ public sealed class GatewayOptionsValidator : IValidateOptions<GatewayOptions>
             failures.Add("Cache:Ttl and Cache:MaxEntries must be positive.");
         }
 
+        if (options.Cache is { Enabled: true, SemanticEnabled: true })
+        {
+            if (!options.Models.TryGetValue(options.Cache.EmbeddingModel, out var embeddingRoute) || embeddingRoute.Kind != ModelKind.Embedding)
+            {
+                failures.Add($"Cache:EmbeddingModel '{options.Cache.EmbeddingModel}' must name an Embedding model.");
+            }
+
+            if (options.Cache.SimilarityThreshold is <= 0 or > 1)
+            {
+                failures.Add("Cache:SimilarityThreshold must be in (0, 1].");
+            }
+        }
+
         if (options.Guardrails.MaxRequestBytes <= 0)
         {
             failures.Add("Guardrails:MaxRequestBytes must be positive.");

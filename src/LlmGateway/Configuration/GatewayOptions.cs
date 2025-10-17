@@ -136,4 +136,13 @@ public sealed class CacheOptions
 
     /// <summary>Upper bound on entries held by the in-memory store.</summary>
     public int MaxEntries { get; set; } = 10_000;
+
+    /// <summary>Also match requests that are worded differently but embed close to a cached one.</summary>
+    public bool SemanticEnabled { get; set; } = true;
+
+    /// <summary>Embedding alias used to embed prompts for the semantic layer.</summary>
+    public string EmbeddingModel { get; set; } = "embed-default";
+
+    /// <summary>Minimum cosine similarity for a semantic hit. Higher is stricter.</summary>
+    public double SimilarityThreshold { get; set; } = 0.95;
 }

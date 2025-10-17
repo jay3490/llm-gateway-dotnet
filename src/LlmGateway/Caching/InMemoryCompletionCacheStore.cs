@@ -30,6 +30,28 @@ public sealed class InMemoryCompletionCacheStore(IOptions<GatewayOptions> option
         return Task.FromResult<CacheEntry?>(null);
     }
 
+    /// <summary>A linear scan over the partition: fine for thousands of entries, not for millions.</summary>
+    public Task<SemanticMatch?> FindNearestAsync(string partition, float[] embedding, CancellationToken cancellationToken)
+    {
+        SemanticMatch? best = null;
+
+        foreach (var entry in _entries.Values)
+        {
+            if (entry.Embedding is null || entry.Partition != partition || IsExpired(entry))
+            {
+                continue;
+            }
+
+            var similarity = VectorMath.CosineSimilarity(embedding, entry.Embedding);
+            if (best is null || similarity > best.Similarity)
+            {
+                best = new SemanticMatch(entry, similarity);
+            }
+        }
+
+        return Task.FromResult(best);
+    }
+
     public Task SetAsync(CacheEntry entry, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(entry);

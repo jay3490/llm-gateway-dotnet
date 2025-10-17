@@ -40,4 +40,5 @@ public static class UsageCacheResults
     public const string None = "none";
     public const string Miss = "miss";
     public const string Exact = "exact";
+    public const string Semantic = "semantic";
 }

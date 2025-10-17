@@ -12,18 +12,35 @@ public enum CacheOutcome
     None,
     Miss,
     ExactHit,
+    SemanticHit,
 }
 
 /// <summary>The result of a cache lookup; a miss carries what is needed to store the response afterwards.</summary>
-public sealed record CacheLookup(CacheOutcome Outcome, ChatCompletionResponse? Response, string Key)
+/// <param name="Similarity">Cosine similarity of a semantic hit; 1 for exact hits.</param>
+public sealed record CacheLookup(
+    CacheOutcome Outcome,
+    ChatCompletionResponse? Response,
+    string Key,
+    string Partition,
+    float[]? Embedding,
+    double Similarity)
 {
-    public bool IsHit => Outcome is CacheOutcome.ExactHit;
+    public bool IsHit => Outcome is CacheOutcome.ExactHit or CacheOutcome.SemanticHit;
 
-    public static CacheLookup NotConsulted { get; } = new(CacheOutcome.None, null, string.Empty);
+    public static CacheLookup NotConsulted { get; } = new(CacheOutcome.None, null, string.Empty, string.Empty, null, 0);
 }
 
-/// <summary>Serves repeated chat requests from the cache before they reach an upstream.</summary>
-public sealed class CompletionCache(ICompletionCacheStore store, IOptions<GatewayOptions> options, TimeProvider timeProvider)
+/// <summary>
+/// Two-layer response cache for chat completions. The exact layer matches the canonical request
+/// hash. The semantic layer embeds the conversation and accepts the nearest cached conversation in
+/// the same partition (same alias, parameters and system prompt) when its cosine similarity reaches
+/// <see cref="CacheOptions.SimilarityThreshold"/>.
+/// </summary>
+public sealed class CompletionCache(
+    ICompletionCacheStore store,
+    IPromptEmbedder embedder,
+    IOptions<GatewayOptions> options,
+    TimeProvider timeProvider)
 {
     private CacheOptions Options => options.Value.Cache;
 
@@ -37,10 +54,25 @@ public sealed class CompletionCache(ICompletionCacheStore store, IOptions<Gatewa
         var key = CacheKeys.Exact(route.Alias, request);
         if (await store.GetAsync(key, cancellationToken) is { } exact && TryDeserialize(exact.ResponseJson) is { } response)
         {
-            return new CacheLookup(CacheOutcome.ExactHit, response, key);
+            return new CacheLookup(CacheOutcome.ExactHit, response, key, exact.Partition, null, 1);
         }
 
-        return new CacheLookup(CacheOutcome.Miss, null, key);
+        if (!Options.SemanticEnabled)
+        {
+            return new CacheLookup(CacheOutcome.Miss, null, key, string.Empty, null, 0);
+        }
+
+        var partition = CacheKeys.Partition(route.Alias, request);
+        var embedding = await embedder.EmbedAsync(CacheKeys.SemanticText(request), cancellationToken);
+        if (embedding is not null
+            && await store.FindNearestAsync(partition, embedding, cancellationToken) is { } nearest
+            && nearest.Similarity >= Options.SimilarityThreshold
+            && TryDeserialize(nearest.Entry.ResponseJson) is { } similar)
+        {
+            return new CacheLookup(CacheOutcome.SemanticHit, similar, key, partition, embedding, nearest.Similarity);
+        }
+
+        return new CacheLookup(CacheOutcome.Miss, null, key, partition, embedding, 0);
     }
 
     public async Task StoreAsync(CacheLookup miss, ChatCompletionResponse response, CancellationToken cancellationToken)
@@ -55,8 +87,8 @@ public sealed class CompletionCache(ICompletionCacheStore store, IOptions<Gatewa
 
         var entry = new CacheEntry(
             miss.Key,
-            Partition: string.Empty,
-            Embedding: null,
+            miss.Partition,
+            miss.Embedding,
             JsonSerializer.Serialize(response, GatewayJson.Options),
             timeProvider.GetUtcNow() + Options.Ttl);
 

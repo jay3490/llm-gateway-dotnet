@@ -46,6 +46,32 @@ public sealed class CacheTests : IDisposable
         Assert.Equal(2, _factory.Upstreams.RequestsTo("primary.test").Count);
     }
 
+    [Fact]
+    public async Task Reworded_request_is_a_semantic_hit()
+    {
+        using var client = _factory.CreateClient();
+
+        await SendAsync(client, "How do I reset my password?");
+        var reworded = await SendAsync(client, "how do I reset my password");
+
+        Assert.Equal("hit-semantic", reworded.Headers.GetValues("X-Gateway-Cache").Single());
+        Assert.Equal("1.0000", reworded.Headers.GetValues("X-Gateway-Cache-Similarity").Single());
+        Assert.Single(_factory.Upstreams.RequestsTo("primary.test"));
+    }
+
+    [Fact]
+    public async Task Semantic_layer_respects_the_configured_threshold()
+    {
+        _factory.WithSetting("Gateway:Cache:SimilarityThreshold", "1");
+        using var client = _factory.CreateClient();
+
+        await SendAsync(client, "How do I reset my password?");
+        var reworded = await SendAsync(client, "How do I reset my password please?");
+
+        Assert.Equal("miss", reworded.Headers.GetValues("X-Gateway-Cache").Single());
+        Assert.Equal(2, _factory.Upstreams.RequestsTo("primary.test").Count);
+    }
+
     [Theory]
     [InlineData("X-Gateway-Cache", "bypass")]
     [InlineData("Cache-Control", "no-cache")]

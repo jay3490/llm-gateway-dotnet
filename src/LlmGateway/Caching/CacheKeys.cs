@@ -19,6 +19,31 @@ public static class CacheKeys
         return Hash(canonical.ToJsonString());
     }
 
+    /// <summary>
+    /// Semantic comparisons only happen within a partition: the same alias, the same parameters and
+    /// the same system prompt. Only the rest of the conversation is compared by meaning.
+    /// </summary>
+    public static string Partition(string alias, ChatCompletionRequest request)
+    {
+        var canonical = Canonical(alias, request);
+        canonical.Remove("messages");
+        canonical["system"] = string.Join("\n", SystemMessages(request).Select(m => m.GetText()));
+        return Hash(canonical.ToJsonString());
+    }
+
+    /// <summary>The non-system conversation as <c>role: text</c> lines, which is what gets embedded.</summary>
+    public static string SemanticText(ChatCompletionRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return string.Join("\n", request.Messages
+            .Where(m => !IsSystem(m))
+            .Select(m => $"{m.Role}: {m.GetText()}"));
+    }
+
+    private static IEnumerable<ChatMessage> SystemMessages(ChatCompletionRequest request) => request.Messages.Where(IsSystem);
+
+    private static bool IsSystem(ChatMessage message) => message.Role is "system" or "developer";
+
     internal static JsonObject Canonical(string alias, ChatCompletionRequest request)
     {
         ArgumentNullException.ThrowIfNull(alias);

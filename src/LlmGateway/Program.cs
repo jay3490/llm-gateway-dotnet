@@ -50,6 +50,7 @@ builder.Services.AddSingleton<UsageReportService>();
 
 builder.Services.AddSingleton<BlockedTermPolicy>();
 builder.Services.AddSingleton<ICompletionCacheStore, InMemoryCompletionCacheStore>();
+builder.Services.AddSingleton<IPromptEmbedder, RoutedPromptEmbedder>();
 builder.Services.AddSingleton<CompletionCache>();
 builder.Services.AddScoped<ChatCompletionHandler>();
 builder.Services.AddScoped<EmbeddingsHandler>();

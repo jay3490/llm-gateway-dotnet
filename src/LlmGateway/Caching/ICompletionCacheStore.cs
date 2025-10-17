@@ -7,10 +7,16 @@ namespace LlmGateway.Caching;
 /// <param name="ResponseJson">The upstream response exactly as it was returned.</param>
 public sealed record CacheEntry(string Key, string Partition, float[]? Embedding, string ResponseJson, DateTimeOffset ExpiresAt);
 
+/// <summary>The closest cached entry to a query embedding.</summary>
+public sealed record SemanticMatch(CacheEntry Entry, double Similarity);
+
 /// <summary>Storage for cached completions.</summary>
 public interface ICompletionCacheStore
 {
     Task<CacheEntry?> GetAsync(string key, CancellationToken cancellationToken);
+
+    /// <summary>The live entry in <paramref name="partition"/> most similar to <paramref name="embedding"/>, if any.</summary>
+    Task<SemanticMatch?> FindNearestAsync(string partition, float[] embedding, CancellationToken cancellationToken);
 
     Task SetAsync(CacheEntry entry, CancellationToken cancellationToken);
 }
