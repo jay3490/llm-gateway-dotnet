@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,7 +50,21 @@ builder.Services.AddHostedService<UsageWriter>();
 builder.Services.AddSingleton<UsageReportService>();
 
 builder.Services.AddSingleton<BlockedTermPolicy>();
-builder.Services.AddSingleton<ICompletionCacheStore, InMemoryCompletionCacheStore>();
+// The store is chosen from options at resolution time, so tests and environments can switch it by configuration alone.
+builder.Services.AddSingleton<ICompletionCacheStore>(services =>
+    services.GetRequiredService<IOptions<GatewayOptions>>().Value.Cache.Store == CacheStoreKind.Redis
+        ? ActivatorUtilities.CreateInstance<RedisCompletionCacheStore>(services)
+        : ActivatorUtilities.CreateInstance<InMemoryCompletionCacheStore>(services));
+builder.Services.AddSingleton<IConnectionMultiplexer>(services =>
+{
+    var connectionString = services.GetRequiredService<IConfiguration>().GetConnectionString("Redis")
+        ?? throw new InvalidOperationException("Cache:Store is Redis but ConnectionStrings:Redis is not set.");
+    var redisOptions = ConfigurationOptions.Parse(connectionString);
+    redisOptions.AbortOnConnectFail = false;
+    // Fail cache calls straight away while disconnected instead of queueing them behind a reconnect.
+    redisOptions.BacklogPolicy = BacklogPolicy.FailFast;
+    return ConnectionMultiplexer.Connect(redisOptions);
+});
 builder.Services.AddSingleton<IPromptEmbedder, RoutedPromptEmbedder>();
 builder.Services.AddSingleton<CompletionCache>();
 builder.Services.AddScoped<ChatCompletionHandler>();

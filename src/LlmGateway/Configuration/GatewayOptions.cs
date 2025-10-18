@@ -126,10 +126,27 @@ public sealed class GuardrailOptions
     public List<string> BlockedTerms { get; init; } = [];
 }
 
+public enum CacheStoreKind
+{
+    /// <summary>Per-instance memory.</summary>
+    Memory,
+
+    /// <summary>Redis, shared by all instances. Needs <c>ConnectionStrings:Redis</c>.</summary>
+    Redis,
+}
+
 public sealed class CacheOptions
 {
     /// <summary>Serve repeated non-streaming chat requests from the cache.</summary>
     public bool Enabled { get; set; } = true;
+
+    public CacheStoreKind Store { get; set; } = CacheStoreKind.Memory;
+
+    /// <summary>Prefix for every key the Redis store writes.</summary>
+    public string RedisKeyPrefix { get; set; } = "llmgw:";
+
+    /// <summary>Most entries per partition the Redis store compares on a semantic lookup, newest first.</summary>
+    public int MaxSemanticCandidates { get; set; } = 500;
 
     /// <summary>How long a cached response stays valid.</summary>
     public TimeSpan Ttl { get; set; } = TimeSpan.FromHours(1);

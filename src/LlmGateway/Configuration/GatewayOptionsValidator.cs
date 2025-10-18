@@ -44,9 +44,9 @@ public sealed class GatewayOptionsValidator : IValidateOptions<GatewayOptions>
         ValidateResilience(options.Resilience, failures);
         ValidateApiKeys(options, failures);
 
-        if (options.Cache.Ttl <= TimeSpan.Zero || options.Cache.MaxEntries <= 0)
+        if (options.Cache.Ttl <= TimeSpan.Zero || options.Cache.MaxEntries <= 0 || options.Cache.MaxSemanticCandidates <= 0)
         {
-            failures.Add("Cache:Ttl and Cache:MaxEntries must be positive.");
+            failures.Add("Cache:Ttl, Cache:MaxEntries and Cache:MaxSemanticCandidates must be positive.");
         }
 
         if (options.Cache is { Enabled: true, SemanticEnabled: true })
