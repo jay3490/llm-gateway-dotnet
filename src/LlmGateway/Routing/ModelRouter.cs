@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using LlmGateway.Observability;
 using LlmGateway.Providers;
 using Polly.CircuitBreaker;
 using Polly.Timeout;
@@ -18,6 +20,7 @@ public sealed partial class ModelRouter(
     UpstreamRegistry upstreams,
     UpstreamResiliencePipelines pipelines,
     RoutePlanner planner,
+    GatewayTelemetry telemetry,
     ILogger<ModelRouter> logger)
 {
     public async Task<RoutedResult<T>> ExecuteAsync<T>(
@@ -35,18 +38,35 @@ public sealed partial class ModelRouter(
             var provider = upstreams.Get(target.Upstream);
             var pipeline = pipelines.Get(target.Upstream);
 
+            using var activity = GatewayTelemetry.ActivitySource.StartActivity("upstream " + target.Upstream, ActivityKind.Client);
+            activity?.SetTag("llm_gateway.model", route.Alias);
+            activity?.SetTag("llm_gateway.upstream", target.Upstream);
+            activity?.SetTag("gen_ai.request.model", target.Model);
+            var started = Stopwatch.GetTimestamp();
+            var outcome = "error";
+
             try
             {
                 var value = await pipeline.ExecuteAsync(
                     async token => await call(provider, target.Model, token),
                     cancellationToken);
 
+                outcome = "success";
                 return new RoutedResult<T>(value, target, failures.Count);
             }
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested && Describe(target, exception) is { } failure)
             {
+                outcome = failure.CircuitOpen ? "circuit_open" : failure.TimedOut ? "timeout" : "transient_error";
                 failures.Add(failure);
                 LogFailover(logger, route.Alias, target.Upstream, target.Model, failure.Reason);
+            }
+            finally
+            {
+                telemetry.RecordUpstreamDuration(target.Upstream, target.Model, outcome, Stopwatch.GetElapsedTime(started));
+                if (outcome != "success")
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error, outcome);
+                }
             }
         }
 

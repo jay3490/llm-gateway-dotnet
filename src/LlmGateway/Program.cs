@@ -1,85 +1,22 @@
-using LlmGateway.Caching;
-using LlmGateway.Configuration;
-using LlmGateway.Contracts;
 using LlmGateway.Endpoints;
-using LlmGateway.Errors;
 using LlmGateway.Guardrails;
-using LlmGateway.Providers;
-using LlmGateway.RateLimiting;
-using LlmGateway.Routing;
-using LlmGateway.Security;
-using LlmGateway.Usage;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Http.Json;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using StackExchange.Redis;
+using LlmGateway.Hosting;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddOptions<GatewayOptions>()
-    .Bind(builder.Configuration.GetSection(GatewayOptions.SectionName))
-    .ValidateOnStart();
-builder.Services.AddSingleton<IValidateOptions<GatewayOptions>, GatewayOptionsValidator>();
-
-builder.Services.Configure<JsonOptions>(options => GatewayJson.Configure(options.SerializerOptions));
-builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
-builder.Services.AddExceptionHandler<GatewayExceptionHandler>();
-builder.Services.AddProblemDetails();
-
-builder.Services.AddSingleton(TimeProvider.System);
-// Polly's per-attempt timeout governs upstream calls, so the client itself never times out.
-builder.Services.AddHttpClient(OpenAiCompatibleProvider.HttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan);
-builder.Services.AddSingleton<UpstreamRegistry>();
-builder.Services.AddSingleton<ModelCatalog>();
-builder.Services.AddSingleton(new RoutePlanner(Random.Shared));
-builder.Services.AddSingleton<UpstreamResiliencePipelines>();
-builder.Services.AddSingleton<ModelRouter>();
-builder.Services.AddSingleton<SseRelay>();
-builder.Services.AddSingleton<ApiKeyStore>();
-builder.Services.AddSingleton<KeyRateLimiter>();
-builder.Services.AddAuthentication(ApiKeyAuthenticationHandler.SchemeName)
-    .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationHandler.SchemeName, null);
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy(GatewayPolicies.Admin, policy => policy.RequireRole(ApiKeyAuthenticationHandler.AdminRole));
-
-builder.Services.AddDbContextFactory<UsageDbContext>((services, options) =>
-    options.UseSqlite(services.GetRequiredService<IConfiguration>().GetConnectionString("Usage") ?? "Data Source=data/usage.db"));
-builder.Services.AddSingleton<UsageRecorder>();
-builder.Services.AddHostedService<UsageWriter>();
-builder.Services.AddSingleton<UsageReportService>();
-
-builder.Services.AddSingleton<BlockedTermPolicy>();
-// The store is chosen from options at resolution time, so tests and environments can switch it by configuration alone.
-builder.Services.AddSingleton<ICompletionCacheStore>(services =>
-    services.GetRequiredService<IOptions<GatewayOptions>>().Value.Cache.Store == CacheStoreKind.Redis
-        ? ActivatorUtilities.CreateInstance<RedisCompletionCacheStore>(services)
-        : ActivatorUtilities.CreateInstance<InMemoryCompletionCacheStore>(services));
-builder.Services.AddSingleton<IConnectionMultiplexer>(services =>
-{
-    var connectionString = services.GetRequiredService<IConfiguration>().GetConnectionString("Redis")
-        ?? throw new InvalidOperationException("Cache:Store is Redis but ConnectionStrings:Redis is not set.");
-    var redisOptions = ConfigurationOptions.Parse(connectionString);
-    redisOptions.AbortOnConnectFail = false;
-    // Fail cache calls straight away while disconnected instead of queueing them behind a reconnect.
-    redisOptions.BacklogPolicy = BacklogPolicy.FailFast;
-    return ConnectionMultiplexer.Connect(redisOptions);
-});
-builder.Services.AddSingleton<IPromptEmbedder, RoutedPromptEmbedder>();
-builder.Services.AddSingleton<CompletionCache>();
-builder.Services.AddScoped<ChatCompletionHandler>();
-builder.Services.AddScoped<EmbeddingsHandler>();
-
-builder.Services.AddHealthChecks();
+builder.AddGatewayObservability();
+builder.Services.AddGateway(builder.Configuration);
 
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UseSerilogRequestLogging();
 app.UseMiddleware<RequestSizeLimitMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapHealthChecks("/health/live");
+app.MapGatewayHealthChecks();
 app.MapOpenAiApi();
 app.MapAdminApi();
 

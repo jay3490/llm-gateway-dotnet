@@ -5,8 +5,14 @@
   <ItemGroup>
     <!-- EF Core stays on the 8.0 LTS servicing line to match net8.0 -->
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.33" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="8.0.33" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.33" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.20.1" />
     <PackageVersion Include="Polly.Core" Version="8.6.6" />
+    <PackageVersion Include="Serilog.AspNetCore" Version="8.0.3" />
     <PackageVersion Include="StackExchange.Redis" Version="2.13.17" />
   </ItemGroup>
   <ItemGroup>

@@ -4,6 +4,7 @@ using LlmGateway.Caching;
 using LlmGateway.Configuration;
 using LlmGateway.Contracts;
 using LlmGateway.Errors;
+using LlmGateway.Observability;
 using LlmGateway.RateLimiting;
 using LlmGateway.Routing;
 using LlmGateway.Security;
@@ -20,6 +21,7 @@ public sealed class ChatCompletionHandler(
     SseRelay relay,
     UsageRecorder usage,
     CompletionCache cache,
+    GatewayTelemetry telemetry,
     TimeProvider timeProvider)
 {
     private const string Endpoint = "chat.completions";
@@ -46,12 +48,16 @@ public sealed class ChatCompletionHandler(
             return GatewayErrors.ModelNotAllowed(route.Alias);
         }
 
+        Activity.Current?.SetTag("llm_gateway.model", route.Alias);
+        Activity.Current?.SetTag("llm_gateway.api_key", apiKey.Name);
+
         // Budget the prompt plus the most the caller allows the model to generate; settled to real usage afterwards.
         var promptEstimate = TokenEstimator.EstimatePrompt(request.Messages);
         using var lease = rateLimiter.TryAcquire(apiKey, promptEstimate + (request.MaxTokens ?? 0));
         lease.WriteHeaders(httpContext.Response);
         if (!lease.IsAcquired)
         {
+            telemetry.RecordRateLimitRejection(lease.LimitedBy!.Value);
             return GatewayErrors.RateLimited(apiKey.Name, lease);
         }
 
@@ -102,6 +108,8 @@ public sealed class ChatCompletionHandler(
         }
 
         var lookup = await cache.LookupAsync(route, request, cancellationToken);
+        telemetry.RecordCacheLookup(route.Alias, lookup.Outcome);
+        Activity.Current?.SetTag("llm_gateway.cache", lookup.Outcome.ToString());
         httpContext.Response.Headers[GatewayHeaders.Cache] = lookup.Outcome switch
         {
             CacheOutcome.ExactHit => "hit-exact",
@@ -147,7 +155,13 @@ public sealed class ChatCompletionHandler(
         bool estimated,
         bool streamed,
         CacheOutcome cacheOutcome,
-        long started) =>
+        long started)
+    {
+        if (target is not null)
+        {
+            telemetry.RecordTokens(route.Alias, target.Upstream, tokens.PromptTokens, tokens.CompletionTokens);
+        }
+
         usage.Record(new UsageRecord
         {
             TimestampUtc = timeProvider.GetUtcNow().UtcDateTime,
@@ -170,6 +184,7 @@ public sealed class ChatCompletionHandler(
                 _ => UsageCacheResults.None,
             },
         });
+    }
 
     private static TokenUsage EstimatedUsage(int promptTokens, int completionTokens) => new()
     {

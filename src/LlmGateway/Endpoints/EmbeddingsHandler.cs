@@ -2,6 +2,7 @@ using System.Diagnostics;
 using LlmGateway.Configuration;
 using LlmGateway.Contracts;
 using LlmGateway.Errors;
+using LlmGateway.Observability;
 using LlmGateway.RateLimiting;
 using LlmGateway.Routing;
 using LlmGateway.Security;
@@ -16,6 +17,7 @@ public sealed class EmbeddingsHandler(
     ModelRouter router,
     KeyRateLimiter rateLimiter,
     UsageRecorder usage,
+    GatewayTelemetry telemetry,
     TimeProvider timeProvider)
 {
     public async Task<IResult> HandleAsync(HttpContext httpContext, EmbeddingRequest request, CancellationToken cancellationToken)
@@ -50,6 +52,7 @@ public sealed class EmbeddingsHandler(
         lease.WriteHeaders(httpContext.Response);
         if (!lease.IsAcquired)
         {
+            telemetry.RecordRateLimitRejection(lease.LimitedBy!.Value);
             return GatewayErrors.RateLimited(apiKey.Name, lease);
         }
 
@@ -60,6 +63,7 @@ public sealed class EmbeddingsHandler(
 
         var tokens = routed.Value.Usage?.TotalTokens ?? estimate;
         lease.Settle(tokens);
+        telemetry.RecordTokens(route.Alias, routed.Target.Upstream, tokens, 0);
         usage.Record(new UsageRecord
         {
             TimestampUtc = timeProvider.GetUtcNow().UtcDateTime,
