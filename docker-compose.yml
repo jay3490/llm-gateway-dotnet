@@ -1,0 +1,43 @@
+# Gateway with the Redis cache store and traces/metrics exported to Jaeger.
+#   docker compose up
+#   curl -H "Authorization: Bearer sk-local-dev" http://localhost:8080/v1/models
+#   Jaeger UI: http://localhost:16686
+#
+# The gateway starts with the offline provider. To route to a real backend, set the
+# Gateway__Upstreams__* and Gateway__Models__* variables below (see README.md).
+
+services:
+  gateway:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      ConnectionStrings__Redis: redis:6379
+      ConnectionStrings__Usage: Data Source=/app/data/usage.db
+      Gateway__Cache__Store: Redis
+      # SHA-256 of "sk-local-dev". Generate your own with: printf '%s' "$KEY" | sha256sum
+      Gateway__ApiKeys__local-dev__KeyHash: 39f9742666377d1b2d177efec3c73c95112c6c70f9ffe9b49abd1a2523295b86
+      Gateway__ApiKeys__local-dev__IsAdmin: "true"
+      Gateway__ApiKeys__local-dev__RequestsPerMinute: "120"
+      Gateway__ApiKeys__local-dev__TokensPerMinute: "200000"
+      OTEL_SERVICE_NAME: llm-gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+    volumes:
+      - usage-data:/app/data
+    depends_on:
+      - redis
+      - jaeger
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+
+volumes:
+  usage-data:
